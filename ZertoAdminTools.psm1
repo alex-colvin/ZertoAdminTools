@@ -27,37 +27,54 @@ Import-Module -Name CredentialManager
    Get-ZertoDatastoreUsage -ZVM 1.2.3.4 -Credential $MyCreds -Zorg CustomerZorg
 
 #>
-Function Get-ZertoDatastoreUsage
-{
+function Get-ZertoDatastoreUsage {
     param(
-        [Parameter(Mandatory,Position=0)]
+        [Parameter(Mandatory, Position=0)]
         [string]$ZVM,
-        [Parameter(Mandatory,Position=1)]
-        [string]$Credential,
+        [Parameter(Mandatory, Position=1)]
+        [pscredential]$Credential,
         [Parameter(Position=2)]
         [string]$Zorg
     )
+
     Connect-ZertoServer -zertoServer $ZVM -credential $Credential -AutoReconnect
+
     $ZertoDatastores = Get-ZertoDatastore
     $ZertoVRAs = Get-ZertoVra
-    $ResourceReportStartTime = (Get-Date -Hour 0 -Minute 00 -Second 00).AddDays(-1) | Get-Date -Format yyyy-MM-ddTHH:mm:ss
-    $ResourceReportEndTime = Get-Date -Hour 0 -Minute 00 -Second 00 -Format yyyy-MM-ddTHH:mm:ss
-    if (([bool]($MyInvocation.BoundParameters.Keys -match 'Zorg')))
-    {
+
+    $ResourceReportStartTime = (Get-Date -Hour 0 -Minute 0 -Second 0).AddDays(-1).ToString('yyyy-MM-ddTHH:mm:ss')
+    $ResourceReportEndTime = (Get-Date -Hour 0 -Minute 0 -Second 0).ToString('yyyy-MM-ddTHH:mm:ss')
+
+    if ($PSBoundParameters.ContainsKey('Zorg')) {
         $CustomerResourceReport = Get-ZertoResourcesReport -zorgName $Zorg -startTime $ResourceReportStartTime -endTime $ResourceReportEndTime
-        } else {
+    } else {
         $CustomerResourceReport = Get-ZertoResourcesReport -startTime $ResourceReportStartTime -endTime $ResourceReportEndTime
     }
-    $CustomerDatastoreNamesRaw = $CustomerResourceReport | Select-Object @{n='DatastoreName';e={$_.RecoverySite.Storage.DatastoreName}}
-    $CustomerDatastoreNames = $CustomerDatastoreNamesRaw.datastorename -split "," | Sort-Object | Get-Unique
-    $CustomerDatastores = foreach ($Name in $CustomerDatastoreNames){$ZertoDatastores | where datastorename -eq $Name}
-    $CustomerDatastores | select-object datastorename,@{n='used';e={$_.stats.usage.datastore.usedinbytes}},@{n='capacity';e={$_.stats.usage.datastore.capacityinbytes}},@{n='percent';e={[math]::Round($_.stats.usage.datastore.usedinbytes/$_.stats.usage.datastore.capacityinbytes*100)}}
-    $CustomerVRAsNamesRaw = $CustomerResourceReport | Select-Object @{n='VRAName';e={$_.RecoverySite.Compute.VraName}}
-    $CustomerVRAsNames = $CustomerVRAsNamesRaw.VRAName | Get-Unique
-    $CustomerVRAs = foreach ($VRA in $CustomerVRAsNames){$ZertoVRAs | where vraname -eq $VRA}
-    #$CustomerVRAs | Select-Object VraName,@{n='VPGs'}
 
-    Disconnect-ZertoServer
+    $CustomerDatastoreNames = ($CustomerResourceReport | Select-Object -ExpandProperty RecoverySite | Select-Object -ExpandProperty Storage | Select-Object -ExpandProperty DatastoreName).Split(',') | Sort-Object -Unique
 
+    $CustomerDatastores = foreach ($Name in $CustomerDatastoreNames) {
+        $ZertoDatastores | Where-Object { $_.datastorename -eq $Name }
+    }
+
+    $CustomerDatastores = $CustomerDatastores | Select-Object datastorename,
+        @{n='used'; e={$_.stats.usage.datastore.usedinbytes}},
+        @{n='capacity'; e={$_.stats.usage.datastore.capacityinbytes}},
+        @{n='percent'; e={[math]::Round($_.stats.usage.datastore.usedinbytes / $_.stats.usage.datastore.capacityinbytes * 100)}}
+
+    $CustomerVRAsNames = ($CustomerResourceReport | Select-Object -ExpandProperty RecoverySite | Select-Object -ExpandProperty Compute | Select-Object -ExpandProperty VraName) | Sort-Object -Unique
+
+    $CustomerVRAs = foreach ($VRAName in $CustomerVRAsNames) {
+        $ZertoVRAs | Where-Object { $_.VRAName -eq $VRAName }
+    }
+
+    $CustomerVRAs = $CustomerVRAs | Select-Object VraName, @{n='VMs'; e={@($_.RecoveryCounters.Vms)}}, @{n='VPGs'; e={@($_.RecoveryCounters.Vpgs)}},@{n='Volumes'; e={@($_.RecoveryCounters.Volumes)}}
+
+    Disconnect-ZertoServer -ErrorAction SilentlyContinue
+
+    return [PSCustomObject]@{
+        Datastores = $CustomerDatastores
+        VRAs       = $CustomerVRAs
+    }
 }
 Export-ModuleMember -Function Get-ZertoDatastoreUsage
