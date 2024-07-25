@@ -2,6 +2,33 @@
 Import-Module -Name ZertoApiWrapper -RequiredVersion 2.0.0
 Import-Module -Name CredentialManager
 
+function Get-CustomerDRStorageReport
+{
+    param(
+    [Parameter(Mandatory)]
+    [ValidateNotNullorEmpty()]
+    [string]$ZVM,
+    [Parameter()]
+    [ValidateNotNull()]
+    [System.Management.Automation.PSCredential]
+    [System.Management.Automation.Credential()]
+    $Credentials,
+    [Parameter()]
+    [string]$Zorg
+)
+
+    Connect-ZertoServer -zertoServer $ZVM -credential $Credentials -AutoReconnect
+    $TodaysDate = Get-Date -Format yyyy-MM-dd -Verbose
+    $CustomerResourcesReport = Get-ZertoResourcesReport -zorgName $Zorg -startTime $TodaysDate -endTime $TodaysDate -Verbose
+
+
+    $CustomerDRStorageReport = $CustomerResourcesReport | Select-Object @{n='VPGName';e={$_.Vpg.VpgName}},@{n='Storage';e={$_.recoverysite.storage.volumesprovisionedStorageInGB}},@{n='Journal';e={[math]::Round($_.recoverysite.storage.journalusedstorageinGB)}},@{n='JournalPercent';e={[math]::Round($_.recoverysite.storage.journalusedstorageinGB/$_.recoverysite.storage.volumesprovisionedStorageInGB*100)}}
+    $CustomerDRStorageReport
+    Disconnect-ZertoServer
+}
+
+Set-Alias -Name drs -Value Get-CustomerDRStorageReport
+
 <#
 .SYNOPSIS
   Retrieves and exports network settings for VPGs from a Zerto Virtual Manager (ZVM).
@@ -575,6 +602,8 @@ function Remove-vpgSettingsIDs
 
 Set-Alias -Name vpgids -Value Remove-vpgSettingsIDs
 
+
+
 #End function Remove-vpgSettingsIDs
 
-Export-ModuleMember -Function Export-ZertoVPGNetworkSettings, Get-ZertoDatastoreUsage, Remove-vpgSettingsIDs -Alias znic, gdu, vpgids
+Export-ModuleMember -Function Get-CustomerDRStorageReport, Export-ZertoVPGNetworkSettings, Get-ZertoDatastoreUsage, Remove-vpgSettingsIDs -Alias znic, gdu, vpgids, drs
