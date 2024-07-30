@@ -540,7 +540,7 @@ Set-Alias -Name znic -Value Export-ZertoVPGNetworkSettings
    Import-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -CSVPath "C:\users\username\documents\VPGsettings.csv"
 
 #>
-function Import-ZertoVPGNetworkSettings {
+function Export-ZertoVPGNetworkSettings {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -568,112 +568,13 @@ function Import-ZertoVPGNetworkSettings {
         [string]$Port="443"
     )
 
-    Function Invoke-WebWrapper($Core,$Uri,$Method,$Headers,$ContentType)
-    {
-        # Compatibility function for PowerShell 5/7 
-        # Mostly we use self-signed certs, so we must ignore SSL cert errors
-        try
-        {
-            if ($Core)
-            {
-                Invoke-WebRequest -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -SkipCertificateCheck
-            }
-            else
-            {
-                Invoke-WebRequest -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -UseBasicParsing
-            }
-        }
-        catch
-        {
-            if ([string]$_.Exception.Response.StatusCode.value__ -eq "401")
-            {
-                throw("Unauthorized, Invalid credentials")
-            }
-            Write-Host "Failed URL $URI" -ForegroundColor Yellow
-            Write-Host "Response code: $($_.Exception.Response.StatusCode.value__) Message: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host $_.ScriptStackTrace -ForegroundColor Red
-        }
-    }
-    Function Invoke-RestWrapper($Core,$Uri,$Method,$Body,$Headers,$ContentType)
-    {
-        # Compatibility function for PowerShell 5/7 
-        # Mostly we use self-signed certs, so we must ignore SSL cert errors
-        try
-        {
-            if ($Core)
-            {
-                Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -Headers $Headers -ContentType $ContentType -SkipCertificateCheck
-            }
-            else
-            {
-                Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -Headers $Headers -ContentType $ContentType -UseBasicParsing
-            }
-        }
-        catch
-        {
-            Write-Host "Failed URL $URI" -ForegroundColor Yellow
-            Write-Host "Response code: $($_.Exception.Response.StatusCode.value__) Message: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host $_.ScriptStackTrace -ForegroundColor Red
-        }
-    }
-    if ($PSVersionTable.PSVersion.Major -gt 6) {$TurboCore = $true} else {$TurboCore = $false}
-    if (-not $TurboCore)
-    {
-        try
-        {
-            Add-Type @"
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
-public class TrustAllCertsPolicy : ICertificatePolicy {
-    public bool CheckValidationResult(
-        ServicePoint srvPoint, X509Certificate certificate,
-        WebRequest request, int certificateProblem) {
-        return true;
-    }
-}
-"@
-            [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
-        }
-        catch
-        {
-            Write-Host "Already ignoring SSL cert errors"
-        }
+    # Connect to ZVM
+
+    $connection = Connect-ZertoServer -server $ZVM -credential $Credentials -Port $Port -AutoReconnect
+    if (-not $connection) {
+        throw "Failed to connect to ZVM"
     }
 
-    $ZertoUser = $Credentials.UserName
-    $ZertoPassword = $Credentials.GetNetworkCredential().Password
-    $BaseURL = "https://" + $ZVM + ":" + "$Port" + "/v1/"
-    $GUIBaseURL = "https://" + $ZVM + ":" + "$Port" + "/GuiServices/v1/VisualQueryProvider/"
-    $ZertoSessionURL = $BaseURL.Trim("/v1/") + "/auth/realms/zerto/protocol/openid-connect/token"
-    #$Header = @{"Authorization" = "Basic "+[System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ZertoUser+":"+$ZertoPassword))}
-    $data = @{
-                        'client_id'     = 'zerto-client'
-                        'username'      = $Credentials.GetNetworkCredential().UserName
-                        'password'      = $Credentials.GetNetworkCredential().Password
-                        'grant_type'    = 'password'
-                    }
-
-                    $params = @{
-                        'Uri'         = 'https://' + $zvm + ':' + $Port + '/auth/realms/zerto/protocol/openid-connect/token'
-                        'Method'      = 'POST'
-                        'Body'        = $data
-                        'ContentType' = 'application/x-www-form-urlencoded'
-                    }
-    $Type = "application/json"
-
-    # Auth
-    $ZertoSessionResponse = Invoke-RestWrapper @params
-    if ($ZertoSessionResponse.StatusCode -eq 401)
-    {
-        throw('401 Not Authorized.  Please check your credentials and try again')
-    }
-    $ZertoSessionHeader = @{"Accept" ="application/json"
-        "Authorization"            = "Bearer " + @($ZertoSessionResponse.access_token)
-    }
-    $DSRemoteSession = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ZertoSession))
-    $GUISessionHeader = @{"Accept" ="application/json"
-        DSRemoteCredentials        = $DSRemoteSession
-    }
     Write-Host "Authenticated to $ZVM" -ForegroundColor Green
 
     $CSVImport = Import-Csv $CSVPath
@@ -691,8 +592,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         foreach ($VPGID in $VPGList)
         {
             $VPGJSON = "{""VpgIdentifier"":""$VPGID""}"
-            $CreateVPGSettingsURL = $BaseURL+"vpgSettings"
-            $VPGSettingsID = Invoke-RestWrapper -Core $Turbocore -Method POST -Uri $CreateVPGSettingsURL -Body $VPGJSON -ContentType $Type -Headers $ZertoSessionHeader  
+            $VPGSettingsID = Invoke-ZertoRestRequest -uri "vpgSettings" -method POST -body $vpgidjson
             if ($?) {$ValidVPGSettingsID = $True} else {$ValidVPGSettingsID = $False}
             $SkipVPGCommit = $true
             # Now we get all the VMs that belong to the VPG without duplicates
@@ -710,10 +610,10 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                     if ($ValidVPGSettingsID)
                     {
                         # Getting NIC settings
-                        $EditVMNICURL = $BaseURL + "vpgSettings/$VPGSettingsID/vms/$VMID/nics/$NICID"
+                        $EditVMNICURL = "vpgSettings/$VPGSettingsID/vms/$VMID/nics/$NICID"
                         # VMNICID might contain spaces so encode the URL
                         $EncodedVMNICURL = [System.Web.HttpUtility]::UrlPathEncode($EditVMNICURL)
-                        $OriginalNICSettings = Invoke-RestWrapper -Core $Turbocore -Method GET -Uri $EncodedVMNICURL -ContentType $Type -Headers $ZertoSessionHeader
+                        $OriginalNICSettings = Invoke-ZertoRestRequest -Method GET -Uri $EncodedVMNICURL 
                         $NICSettings = $OriginalNICSettings | ConvertTo-Json -Depth 10 | ConvertFrom-Json
                         $RecoverySiteId = $NIC.RecoverySiteId
                         if ($vCloud)
@@ -724,9 +624,9 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                             {
                                 Write-Host "Discovering new OrgVDC " -NoNewline -ForegroundColor Cyan
                                 $null = $RecoveryOrgVdcList.Add($RecoveryOrgVDCId)
-                                $VPGOrgVdcNetworksURL = $baseURL+"virtualizationsites/$RecoverySiteId/orgvdcs/$RecoveryOrgVDCId/networks"
+                                $VPGOrgVdcNetworksURL = "virtualizationsites/$RecoverySiteId/orgvdcs/$RecoveryOrgVDCId/networks"
                                 Write-Host "networks." -ForegroundColor Cyan
-                                $NetworksBySiteId.$RecoveryOrgVdcId = Invoke-RestWrapper -Core $Turbocore -Method GET -Uri $VPGOrgVdcNetworksURL -ContentType $Type -Headers $ZertoSessionHeader
+                                $NetworksBySiteId.$RecoveryOrgVdcId = Invoke-ZertoRestRequest -Method GET -Uri $VPGOrgVdcNetworksURL
                             }
                             # Discover network identifiers
                             $FailoverNetworkID = $NetworksBySiteId.$RecoveryOrgVdcId | Where-Object {$_.VirtualizationNetworkName -eq $NIC.FailoverNetworkName} | select -ExpandProperty NetworkIdentifier
@@ -761,9 +661,9 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                             {
                                 Write-Host "Discovering new recovery site " -NoNewline -ForegroundColor Cyan
                                 $null = $RecoverySiteList.Add($RecoverySiteId)
-                                $VPGPortGroupsURL = $baseURL+"virtualizationsites/$RecoverySiteId/networks"
+                                $VPGPortGroupsURL = "virtualizationsites/$RecoverySiteId/networks"
                                 Write-Host "networks." -ForegroundColor Cyan
-                                $NetworksBySiteId.$RecoverySiteId = Invoke-RestWrapper -Core $Turbocore -Method GET -Uri $VPGPortGroupsURL -ContentType $Type -Headers $ZertoSessionHeader
+                                $NetworksBySiteId.$RecoverySiteId = Invoke-ZertoRestRequest -Method GET -Uri $VPGPortGroupsURL
                             }
                             $FailoverNetworkID = $NetworksBySiteId.$RecoverySiteId | Where-Object {$_.VirtualizationNetworkName -eq $NIC.FailoverNetworkName} | select -ExpandProperty NetworkIdentifier
                             $FailoverTestNetworkID = $NetworksBySiteId.$RecoverySiteId | Where-Object {$_.VirtualizationNetworkName -eq $NIC.FailoverTestNetworkName} | select -ExpandProperty NetworkIdentifier
@@ -808,10 +708,10 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                             # If *any* nics in the VPG are requested to be changed, then we must commit
                             $SkipVPGCommit = $false
                             Write-Host ($Comparison | Select-Object @{E={$_.InputObject};N='RequestedChanges'} | Format-Table | Out-String)
-                            $EditVMNICURL = $BaseURL + "vpgSettings/$VPGSettingsID/vms/$VMID/nics/$NICID"
+                            $EditVMNICURL = "vpgSettings/$VPGSettingsID/vms/$VMID/nics/$NICID"
                             # VMNICID might contain spaces so encode the URL
                             $EncodedVMNICURL = [System.Web.HttpUtility]::UrlPathEncode($EditVMNICURL)
-                            $null = Invoke-RestWrapper -Core $Turbocore -Method PUT -Uri $EncodedVMNICURL -Body $VMNICJSON -ContentType $Type -Headers $ZertoSessionHeader  
+                            $null = Invoke-ZertoRestRequest -Method PUT -Uri $EncodedVMNICURL -Body $VMNICJSON
                         }
                         $FailoverNetworkID = $null
                         $FailoverTestNetworkID = $null
@@ -820,21 +720,22 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
             }
             if (-not ($SkipVPGCommit))
             {
-                $CommitVPGSettingURL = $BaseURL + "vpgSettings/$VPGSettingsID/commit"
-                $null = Invoke-RestWrapper -Core $Turbocore -Method POST -Uri $CommitVPGSettingURL -Headers $ZertoSessionHeader -ContentType $Type
+                $CommitVPGSettingURL = "vpgSettings/$VPGSettingsID/commit"
+                $null = Invoke-ZertoRestRequest -Method POST -Uri $CommitVPGSettingURL
                 if ($?) {Write-Host "Update for VPG:$VPGName completed" -ForegroundColor Green} else {Write-Host "Update failed" -ForegroundColor Red;continue}            
             }
             else
             {
                 Write-Host "No changes for VPG:$VPGName" -ForegroundColor Green 
                 # Deleting VPG edit settings ID (same as closing the edit screen on a VPG in the ZVM without making any changes)
-                $VPGSettingsURL = $BaseURL + "vpgSettings/$VPGSettingsID"
-                $null = Invoke-RestWrapper -Core $Turbocore -Method Delete -Uri $VPGSettingsURL -ContentType $Type -Headers $ZertoSessionHeader
+                $VPGSettingsURL = "vpgSettings/$VPGSettingsID"
+                $null = Invoke-ZertoRestRequest -Method Delete -Uri $VPGSettingsURL
             }
         }
         Write-Host "All done!" 
     }
 }
+
 
 Set-Alias -Name iznic -Value Import-ZertoVPGNetworkSettings
 
