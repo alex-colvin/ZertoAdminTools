@@ -68,22 +68,22 @@ Set-Alias -Name drs -Value Get-CustomerDRStorageReport
 
 .EXAMPLE
    # Get network settings for all VPGs in a specific site and export to the default path.
-   Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.tierpoint.com" -Credentials $MyCreds -RecoveryVPGType "vCenter"
+   Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -RecoveryVPGType "vCenter"
 
 .EXAMPLE
    # Get network settings for a specific customer and export to a specified path.
-   Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.tierpoint.com" -Credentials $MyCreds -RecoveryVPGType "VCD" -Zorg "CustomerZorg" -ExportPath "C:\Exports"
+   Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -RecoveryVPGType "VCD" -Zorg "CustomerZorg" -ExportPath "C:\Exports"
 
 .EXAMPLE
    # Get network settings for a specific VPG and export to the default path.
-   Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.tierpoint.com" -Credentials $MyCreds -RecoveryVPGType "vCenter" -VPGName "VPG1"
+   Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -RecoveryVPGType "vCenter" -VPGName "VPG1"
 
 #>
 
 function Export-ZertoVPGNetworkSettings {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory,HelpMessage='Enter ZVM hostname without the port here eg. "zerto-lab.lab.tierpoint.com"')]
+        [Parameter(Mandatory,HelpMessage='Enter ZVM hostname without the port here eg. "zerto-lab.lab.zerto.com"')]
         [ValidateNotNullorEmpty()]
         [string]$ZVM,
         [Parameter(Mandatory)]
@@ -150,118 +150,16 @@ function Export-ZertoVPGNetworkSettings {
     }
     $Global:ProgressPreference = $defaultProgPref
 
-    Function Invoke-WebWrapper($Core,$Uri,$Method,$Headers,$ContentType)
-    {
-        # Compatibility function for PowerShell 5/7 
-        # Mostly we use self-signed certs, so we must ignore SSL cert errors
-        try
-        {
-            if ($Core)
-            {
-                Invoke-WebRequest -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -SkipCertificateCheck
-            }
-            else
-            {
-                Invoke-WebRequest -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -UseBasicParsing
-            }
-        }
-        catch
-        {
-            if ([string]$_.Exception.Response.StatusCode.value__ -eq "401")
-            {
-                throw("Unauthorized, Invalid credentials")
-            }
-            Write-Host "Failed URL $URI" -ForegroundColor Yellow
-            Write-Host "Response code: $($_.Exception.Response.StatusCode.value__) Message: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host $_.ScriptStackTrace -ForegroundColor Red
-        }
-    }
-    Function Invoke-RestWrapper($Core,$Uri,$Method,$Body,$Headers,$ContentType)
-    {
-        # Compatibility function for PowerShell 5/7 
-        # Mostly we use self-signed certs, so we must ignore SSL cert errors
-        try
-        {
-            if ($Core)
-            {
-                Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -Headers $Headers -ContentType $ContentType -SkipCertificateCheck
-            }
-            else
-            {
-                Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -Headers $Headers -ContentType $ContentType -UseBasicParsing
-            }
-        }
-        catch
-        {
-            Write-Host "Failed URL $URI" -ForegroundColor Yellow
-            Write-Host "Response code: $($_.Exception.Response.StatusCode.value__) Message: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host $_.ScriptStackTrace -ForegroundColor Red
-        }
-    }
-    if ($PSVersionTable.PSVersion.Major -gt 6) {$TurboCore = $true} else {$TurboCore = $false}
-    if (-not $TurboCore)
-    {
-        try
-        {
-        Add-Type @"
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
-public class TrustAllCertsPolicy : ICertificatePolicy {
-    public bool CheckValidationResult(
-        ServicePoint srvPoint, X509Certificate certificate,
-        WebRequest request, int certificateProblem) {
-        return true;
-    }
-}
-"@
-            [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
-        }
-        catch
-        {
-            Write-Host "Already ignoring SSL cert errors"
-        }
-    }
-
-    $ZertoUser = $Credentials.UserName
-    $ZertoPassword = $Credentials.GetNetworkCredential().Password
-    $BaseURL = "https://" + $ZVM + ":" + "$Port" + "/v1/"
-    $GUIBaseURL = "https://" + $ZVM + ":" + "$Port" + "/GuiServices/v1/VisualQueryProvider/"
-    $ZertoSessionURL = $BaseURL.Trim("/v1/") + "/auth/realms/zerto/protocol/openid-connect/token"
-    #$Header = @{"Authorization" = "Basic "+[System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ZertoUser+":"+$ZertoPassword))}
-    $data = @{
-                        'client_id'     = 'zerto-client'
-                        'username'      = $Credentials.GetNetworkCredential().UserName
-                        'password'      = $Credentials.GetNetworkCredential().Password
-                        'grant_type'    = 'password'
-                    }
-
-                    $params = @{
-                        'Uri'         = 'https://' + $zvm + ':' + $Port + '/auth/realms/zerto/protocol/openid-connect/token'
-                        'Method'      = 'POST'
-                        'Body'        = $data
-                        'ContentType' = 'application/x-www-form-urlencoded'
-                    }
-    $Type = "application/json"
-
+    
     # Auth
-    $ZertoSessionResponse = Invoke-RestWrapper @params 
-    if ($ZertoSessionResponse.StatusCode -eq 401)
-    {
-        throw('401 Not Authorized.  Please check your credentials and try again')
-    }
-    $ZertoSessionHeader = @{"Accept" ="application/json"
-        "Authorization"            = "Bearer " + @($ZertoSessionResponse.access_token)
-    }
-    $DSRemoteSession = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ZertoSession))
-    $GUISessionHeader = @{"Accept" ="application/json"
-        DSRemoteCredentials        = $DSRemoteSession
-    }
+    
+    Connect-ZertoServer -Server $ZVM -credential $Credentials -AutoReconnect
+
     Write-Host "Authenticated to $ZVM" -ForegroundColor Green
 
     if (([bool]($MyInvocation.BoundParameters.Keys -match 'protectedsite')) -or ([bool]($MyInvocation.BoundParameters.Keys -match 'recoverysite')))
     {
-        $VirtualizationSitesURL = $BaseURL+"virtualizationsites"
-        $VirtualizationSiteList = Invoke-RestWrapper -Core $TurboCore -Uri $VirtualizationSitesURL -Method Get -TimeoutSec 100 -Headers $ZertoSessionHeader -ContentType $Type 
+        $VirtualizationSiteList = Get-ZertoVirtualizationSite
         # Only set requested values
         if ([bool]($MyInvocation.BoundParameters.Keys -match 'protectedsite'))
         {
@@ -285,8 +183,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
     # Get Zorgs if requested
     if (([bool]($MyInvocation.BoundParameters.Keys -match 'zorg')))
     {
-        $ZorgURL = $BaseURL+"zorgs"
-        $ZorgList = Invoke-RestWrapper -Core $TurboCore -Uri $ZorgURL -Method Get -Headers $ZertoSessionHeader -ContentType $Type 
+        $ZorgList = Get-ZertoZorg
         $ZorgIdentifier = $ZorgList | Where-Object {$_.ZorgName -eq $Zorg} | select -ExpandProperty ZorgIdentifier
     }
 
@@ -297,13 +194,9 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 
     # Doing filter in the URL to lighten load on ZVM, but since it doesnt support wildcards, we omit VPGName and sort that later
     # Then make sure its encoded properly since users might enter shenanigans
-    $VPGListUrl = $BaseURL+"vpgs?zorgIdentifier=$ZorgIdentifier&protectedSiteIdentifier=$ProtectedSiteIdentifier&recoverySiteIdentifier=" +
-        "$RecoverySiteIdentifier&recoverySiteType=$RecoverySiteType&protectedSiteType=$ProtectedSiteType"
-    # Without this add-type PowerShell 5 will bomb
-    Add-Type -AssemblyName System.Web
-    $EncodedVPGListUrl = [System.Web.HttpUtility]::UrlPathEncode($VPGListUrl)
-    Write-Host "Filtering VPGS: $EncodedVPGListUrl"
-    $VPGList = Invoke-RestWrapper -Core $TurboCore -Uri $EncodedVPGListUrl -Method Get -Headers $ZertoSessionHeader -ContentType $Type 
+    $VPGListUrl = "vpgs?zorgIdentifier=$ZorgIdentifier&protectedSiteIdentifier=$ProtectedSiteIdentifier&recoverySiteIdentifier=$RecoverySiteIdentifier&recoverySiteType=$RecoverySiteType&protectedSiteType=$ProtectedSiteType"
+    Write-Host "Filtering VPGS: $VPGListUrl"
+    $VPGList = Invoke-ZertoRestRequest -Uri $VPGListUrl -Method Get
     if ([bool]($MyInvocation.BoundParameters.Keys -match 'vpgname'))
     {
         $VPGList = $VPGList | Where-Object {$_.vpgName -like "*${VPGName}*"}
@@ -313,25 +206,21 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         Write-Host "Found $($VPGList.count) VPGs to process" -ForegroundColor Yellow
     }    
     # Getting list of VMs filtered by Zorg (orgname is undocumented filter?)
-    $VMListUrl = $BaseURL+"vms?orgname=$Zorg&protectedSiteIdentifier=$ProtectedSiteIdentifier&recoverySiteIdentifier=" +
-        "$RecoverySiteIdentifier&recoverySiteType=$RecoverySiteType&protectedSiteType=$ProtectedSiteType"
-    $EncodedVMListUrl = [System.Web.HttpUtility]::UrlPathEncode($VMListUrl)
-    Write-Host "Filtering VMS: $EncodedVMListUrl"
-    $VMList = Invoke-RestWrapper -Core $TurboCore -Uri $EncodedVMListUrl -Method Get -Headers $ZertoSessionHeader -ContentType $Type  
+    $VMListUrl = "vms?orgname=$Zorg&protectedSiteIdentifier=$ProtectedSiteIdentifier&recoverySiteIdentifier=$RecoverySiteIdentifier&recoverySiteType=$RecoverySiteType&protectedSiteType=$ProtectedSiteType"
+    Write-Host "Filtering VMS: $VMListUrl"
+    $VMList = Invoke-ZertoRestRequest -Uri $VMListUrl -Method Get
     Write-Host "Found $($VMList.count) VMs to process" -ForegroundColor Yellow
     Write-Host "Counting VPGSettings Objects"
-    $VPGSettingsObjectsURL = $BaseURL+"vpgSettings"
-    $VPGSettingsObjects = Invoke-RestWrapper -Core $TurboCore -Uri $VPGSettingsObjectsURL -Method Get -ContentType $Type -Headers $ZertoSessionHeader
+    $VPGSettingsObjects = Get-ZertoVpgSetting
     $VPGSettingsObjectCount = $VPGSettingsObjects.count
     if ($VPGSettingsObjectCount -ge 99)
     {
-        For($i = 0; $i -lt 5; $i++)
+        For($i = 0; $i -lt 10; $i++)
         {
             Write-Host "There are $VPGSettingsObjectCount VPG Settings ojects. Deleting VPGSettings objects." -ForegroundColor Red
             $VPGSettingsObjectID = $VPGSettingsObjects[$i].vpgsettingsidentifier
-            $deleteVpgSettingsObjectURL = $VPGSettingsObjectsURL+"/"+$VPGSettingsObjectID
-            $null = Invoke-RestWrapper -Core $TurboCore -Uri $deleteVpgSettingsObjectURL -Method delete -ContentType $Type -Headers $ZertoSessionHeader 
-            $VPGSettingsObjects = Invoke-RestWrapper -Core $TurboCore -Uri $VPGSettingsObjectsURL -Method Get -ContentType $Type -Headers $ZertoSessionHeader
+            $null = Remove-ZertoVpgSettingsIdentifier -vpgSettingsIdentifier $VPGSettingsObjectID 
+            $VPGSettingsObjects = Get-ZertoVpgSetting
             $VPGSettingsObjectCount = $VPGSettingsObjects.count
         } 
     }    
@@ -344,26 +233,16 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         $VPGJSON = "{""VpgIdentifier"":""$VPGID""}"
         Write-Host "Starting $VPGName" -ForegroundColor Yellow
         # Posting the VPG JSON Request to the API to get a settings ID (like clicking edit on a VPG in the GUI)
-        $EditVPGURL = $BaseURL+"vpgSettings"
-        $VPGSettingsID = Invoke-RestWrapper -Core $TurboCore -Uri $EditVPGURL -Method Post -Body $VPGJSON -ContentType $Type -Headers $ZertoSessionHeader   
+        $EditVPGURL = "vpgSettings"
+        $VPGSettingsID = Invoke-ZertoRestRequest -Uri $EditVPGURL -Method Post -Body $VPGJSON   
         if ($VPGSettingsID -ne $null) {$ValidVPGSettingsID = $true} 
-        <#else {
-            $ValidVPGSettingsID = $false
-            #Zerto holds a max of 100 vpgSettings objects. Checking for that here and prompting user to delete vpgSettings objects.
-            $VPGSettingsObjects = Invoke-RestWrapper -Core $TurboCore -Uri $EditVPGURL -Method Get -ContentType $Type -Headers $ZertoSessionHeader
-            $VPGSettingsObjectCount = $VPGSettingsObjects.count
-            Write-Host "Zerto holds a maximum of 101 vpg settings objects. 
-         
-            }#>
-
-
         # Getting VPG settings from API
         # Skipping if unable to obtain valid VPG setting identifier
         if ($ValidVPGSettingsID)
         {
             # Getting VPG settings
-            $VPGSettingsURL = $BaseURL+"vpgSettings/"+$VPGSettingsID
-            $VPGSettings = Invoke-RestWrapper -Core $TurboCore -Method Get -Uri $VPGSettingsURL -ContentType $Type -Headers $ZertoSessionHeader   
+            $VPGSettingsURL = "vpgSettings/"+$VPGSettingsID
+            $VPGSettings = Invoke-ZertoRestRequest -Method Get -Uri $VPGSettingsURL   
             $VPGVMs = $VPGSettings.VMs
             $VPGRecoverySiteID = $VPGSettings.Basic.RecoverySiteIdentifier
             # Discover if new site and do VCD/vcenter only actions here
@@ -374,9 +253,9 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                 {
                     Write-Host "Discovering new OrgVDC " -NoNewline -ForegroundColor Cyan
                     $null = $VPGRecoveryOrgVDCArray.Add($VPGRecoveryOrgVDC)
-                    $VPGOrgVdcNetworksURL = $baseURL+"virtualizationsites/$VPGRecoverySiteID/orgvdcs/$VPGRecoveryOrgVDC/networks"
+                    $VPGOrgVdcNetworksURL = "virtualizationsites/$VPGRecoverySiteID/orgvdcs/$VPGRecoveryOrgVDC/networks"
                     Write-Host "networks." -ForegroundColor Cyan
-                    $OrgVdcNetworkList += Invoke-RestWrapper -Core $TurboCore -Method Get -Uri $VPGOrgVdcNetworksURL -ContentType $Type -Headers $ZertoSessionHeader   
+                    $OrgVdcNetworkList += Invoke-ZertoRestRequest -Method Get -Uri $VPGOrgVdcNetworksURL
                 }
             }
             else
@@ -385,9 +264,9 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                 {
                     Write-Host "Discovering new vCenter " -NoNewline -ForegroundColor Cyan
                     $null = $VPGRecoverySiteArray.Add($VPGRecoverySiteID)
-                    $VPGPortGroupsURL = $baseURL+"virtualizationsites/$VPGRecoverySiteID/networks"
+                    $VPGPortGroupsURL = "virtualizationsites/$VPGRecoverySiteID/networks"
                     Write-Host "networks." -ForegroundColor Cyan
-                    $PortGroupList += Invoke-RestWrapper -Core $TurboCore -Method Get -Uri $VPGPortGroupsURL -ContentType $Type -Headers $ZertoSessionHeader   
+                    $PortGroupList += Invoke-ZertoRestRequest -Method Get -Uri $VPGPortGroupsURL   
                 }
             }
             ForEach ($VM in $VPGVMs)
@@ -480,7 +359,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                 }
             }
             # Deleting VPG edit settings ID (same as closing the edit screen on a VPG in the ZVM without making any changes)
-            $null = Invoke-RestWrapper -Core $TurboCore -Method Delete -Uri $VPGSettingsURL -TimeoutSec 100 -ContentType $Type -Headers $ZertoSessionHeader
+            $null = Remove-ZertoVpgSettingsIdentifier -vpgSettingsIdentifier $VPGSettingsID
             Write-Host "Finished $VPGName" -ForegroundColor Green
         }
     }
@@ -540,7 +419,7 @@ Set-Alias -Name znic -Value Export-ZertoVPGNetworkSettings
    Import-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -CSVPath "C:\users\username\documents\VPGsettings.csv"
 
 #>
-function Export-ZertoVPGNetworkSettings {
+function Import-ZertoVPGNetworkSettings {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
