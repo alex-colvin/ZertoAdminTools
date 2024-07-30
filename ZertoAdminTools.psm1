@@ -152,8 +152,13 @@ function Export-ZertoVPGNetworkSettings {
 
     
     # Auth
-    
-    Connect-ZertoServer -Server $ZVM -credential $Credentials -AutoReconnect
+    if((get-module -name zertoapiwrapper).version.Major -eq 1)
+    {
+        #This required some changes to due to dependency conflicts (Changed function name in psm1 file and in psd1 file for version 1.4.2)
+        Connect-ZertoServerUnder10 -Server $ZVM -credential $Credentials
+    } else {
+        Connect-ZertoServer -Server $ZVM -credential $Credentials -AutoReconnect
+    }
 
     Write-Host "Authenticated to $ZVM" -ForegroundColor Green
 
@@ -371,8 +376,7 @@ function Export-ZertoVPGNetworkSettings {
         $VMNICArrayList | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
         if (Test-Path -Path $CSVExportFile -PathType Leaf)
         {
-            Write-Host "`nCopy/Paste next line to open CSV:" -ForegroundColor Green
-            Write-Host ". $CSVExportFile `n" 
+            . $CSVExportFile 
         }
         else
         {
@@ -449,9 +453,12 @@ function Import-ZertoVPGNetworkSettings {
 
     # Connect to ZVM
 
-    $connection = Connect-ZertoServer -server $ZVM -credential $Credentials -Port $Port -AutoReconnect
-    if (-not $connection) {
-        throw "Failed to connect to ZVM"
+    if((get-module -name zertoapiwrapper).version.Major -eq 1)
+    {
+        #This required some changes to due to dependency conflicts (Changed function name in psm1 file and in psd1 file for version 1.4.2)
+        Connect-ZertoServerUnder10 -Server $ZVM -credential $Credentials
+    } else {
+        Connect-ZertoServer -Server $ZVM -credential $Credentials -AutoReconnect
     }
 
     Write-Host "Authenticated to $ZVM" -ForegroundColor Green
@@ -704,7 +711,6 @@ function Remove-vpgSettingsIDs
 }
 
 Set-Alias -Name vpgids -Value Remove-vpgSettingsIDs
-
 
 
 #End function Remove-vpgSettingsIDs
