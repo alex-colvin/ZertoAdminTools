@@ -517,6 +517,329 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 Set-Alias -Name znic -Value Export-ZertoVPGNetworkSettings
 
 <#
+.SYNOPSIS
+  This Commandlet is the compliment of Export-ZertoVPGNetworkSettings. After exporting network settings to a csv and editting to the desired settings, this function imports the csv and uploads the network settings for VPGs to a Zerto Virtual Manager (ZVM).
+
+.DESCRIPTION
+  This function connects to a Zerto Virtual Manager (ZVM) and sends network settings for Virtual Protection Groups (VPGs) based on and a csv file. 
+
+.PARAMETER ZVM
+  The IP address or FQDN of the Zerto Virtual Manager.
+
+.PARAMETER CSVPath
+  The path to the csv file. 
+
+.PARAMETER RecoveryVPGType
+  The type of recovery VPG. Valid values are "vCenter" or "VCD".
+
+.PARAMETER Port
+  The port to connect to the ZVM. Default is 443.
+
+.EXAMPLE
+   # Send network settings for all VPGs listed in the csv to the Zerto Virtual Manager.
+   Import-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -CSVPath "C:\users\username\documents\VPGsettings.csv"
+
+#>
+function Import-ZertoVPGNetworkSettings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullorEmpty()]
+        [string]$ZVM,
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]
+        $Credentials,
+        [Parameter(Mandatory)]
+        [ValidateScript({
+                if (!($_ | Test-Path))
+                {
+                    throw "File does not exist"
+                }
+                if (!($_ | Test-Path -PathType Leaf))
+                {
+                    throw "The path argument must be a file not a directory"
+                }
+                return $true
+            })]
+        [string]$CSVPath,
+        [Parameter()]
+        [string]$Port="443"
+    )
+
+    Function Invoke-WebWrapper($Core,$Uri,$Method,$Headers,$ContentType)
+    {
+        # Compatibility function for PowerShell 5/7 
+        # Mostly we use self-signed certs, so we must ignore SSL cert errors
+        try
+        {
+            if ($Core)
+            {
+                Invoke-WebRequest -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -SkipCertificateCheck
+            }
+            else
+            {
+                Invoke-WebRequest -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -UseBasicParsing
+            }
+        }
+        catch
+        {
+            if ([string]$_.Exception.Response.StatusCode.value__ -eq "401")
+            {
+                throw("Unauthorized, Invalid credentials")
+            }
+            Write-Host "Failed URL $URI" -ForegroundColor Yellow
+            Write-Host "Response code: $($_.Exception.Response.StatusCode.value__) Message: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host $_.ScriptStackTrace -ForegroundColor Red
+        }
+    }
+    Function Invoke-RestWrapper($Core,$Uri,$Method,$Body,$Headers,$ContentType)
+    {
+        # Compatibility function for PowerShell 5/7 
+        # Mostly we use self-signed certs, so we must ignore SSL cert errors
+        try
+        {
+            if ($Core)
+            {
+                Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -Headers $Headers -ContentType $ContentType -SkipCertificateCheck
+            }
+            else
+            {
+                Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -Headers $Headers -ContentType $ContentType -UseBasicParsing
+            }
+        }
+        catch
+        {
+            Write-Host "Failed URL $URI" -ForegroundColor Yellow
+            Write-Host "Response code: $($_.Exception.Response.StatusCode.value__) Message: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host $_.ScriptStackTrace -ForegroundColor Red
+        }
+    }
+    if ($PSVersionTable.PSVersion.Major -gt 6) {$TurboCore = $true} else {$TurboCore = $false}
+    if (-not $TurboCore)
+    {
+        try
+        {
+            Add-Type @"
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+public class TrustAllCertsPolicy : ICertificatePolicy {
+    public bool CheckValidationResult(
+        ServicePoint srvPoint, X509Certificate certificate,
+        WebRequest request, int certificateProblem) {
+        return true;
+    }
+}
+"@
+            [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+        }
+        catch
+        {
+            Write-Host "Already ignoring SSL cert errors"
+        }
+    }
+
+    $ZertoUser = $Credentials.UserName
+    $ZertoPassword = $Credentials.GetNetworkCredential().Password
+    $BaseURL = "https://" + $ZVM + ":" + "$Port" + "/v1/"
+    $GUIBaseURL = "https://" + $ZVM + ":" + "$Port" + "/GuiServices/v1/VisualQueryProvider/"
+    $ZertoSessionURL = $BaseURL.Trim("/v1/") + "/auth/realms/zerto/protocol/openid-connect/token"
+    #$Header = @{"Authorization" = "Basic "+[System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ZertoUser+":"+$ZertoPassword))}
+    $data = @{
+                        'client_id'     = 'zerto-client'
+                        'username'      = $Credentials.GetNetworkCredential().UserName
+                        'password'      = $Credentials.GetNetworkCredential().Password
+                        'grant_type'    = 'password'
+                    }
+
+                    $params = @{
+                        'Uri'         = 'https://' + $zvm + ':' + $Port + '/auth/realms/zerto/protocol/openid-connect/token'
+                        'Method'      = 'POST'
+                        'Body'        = $data
+                        'ContentType' = 'application/x-www-form-urlencoded'
+                    }
+    $Type = "application/json"
+
+    # Auth
+    $ZertoSessionResponse = Invoke-RestWrapper @params
+    if ($ZertoSessionResponse.StatusCode -eq 401)
+    {
+        throw('401 Not Authorized.  Please check your credentials and try again')
+    }
+    $ZertoSessionHeader = @{"Accept" ="application/json"
+        "Authorization"            = "Bearer " + @($ZertoSessionResponse.access_token)
+    }
+    $DSRemoteSession = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ZertoSession))
+    $GUISessionHeader = @{"Accept" ="application/json"
+        DSRemoteCredentials        = $DSRemoteSession
+    }
+    Write-Host "Authenticated to $ZVM" -ForegroundColor Green
+
+    $CSVImport = Import-Csv $CSVPath
+    $NumNICs = (Get-Content $CSVPath).Count - 1
+    $RecoverySiteList = New-Object -TypeName "System.Collections.ArrayList"
+    $RecoveryOrgVdcList = New-Object -TypeName "System.Collections.ArrayList"
+    $NetworksBySiteId = @{}
+
+    if ($null -ne $CSVImport)
+    {
+        # Each line in CSV represents a NIC.  One VPG might have multiple VMS and multiple NICs per VM.  
+        # We get one VPGSetting per VPG, then commit once if and only if any changes were requested
+        $VPGList = $CSVImport | Select-Object -Unique -ExpandProperty VPGID
+        Write-Host "Read $NumNICs NIC's across $($VPGlist.Count) VPG's to configure." -ForegroundColor Yellow
+        foreach ($VPGID in $VPGList)
+        {
+            $VPGJSON = "{""VpgIdentifier"":""$VPGID""}"
+            $CreateVPGSettingsURL = $BaseURL+"vpgSettings"
+            $VPGSettingsID = Invoke-RestWrapper -Core $Turbocore -Method POST -Uri $CreateVPGSettingsURL -Body $VPGJSON -ContentType $Type -Headers $ZertoSessionHeader  
+            if ($?) {$ValidVPGSettingsID = $True} else {$ValidVPGSettingsID = $False}
+            $SkipVPGCommit = $true
+            # Now we get all the VMs that belong to the VPG without duplicates
+            $VMList = $CSVImport | Where-Object {$_.VPGID -eq $VPGID} | Select-Object -ExpandProperty VMID -Unique
+            foreach ($VMID in $VMList)
+            {
+                # Then we gather all the lines(NICs) that match that VMID
+                $NICList = $CSVImport | Where-Object {$_.VMID -eq $VMID} 
+                foreach ($NIC in $NICList)
+                {
+                    $VPGName = $NIC.VPGName
+                    $NICID = $NIC.NICID
+                    $vCloud = [System.Convert]::ToBoolean($NIC.IsVcloud)
+                    Write-Host "Starting NIC:$NICID on VM:$VMID VPG:$VPGName" -ForegroundColor Yellow
+                    if ($ValidVPGSettingsID)
+                    {
+                        # Getting NIC settings
+                        $EditVMNICURL = $BaseURL + "vpgSettings/$VPGSettingsID/vms/$VMID/nics/$NICID"
+                        # VMNICID might contain spaces so encode the URL
+                        $EncodedVMNICURL = [System.Web.HttpUtility]::UrlPathEncode($EditVMNICURL)
+                        $OriginalNICSettings = Invoke-RestWrapper -Core $Turbocore -Method GET -Uri $EncodedVMNICURL -ContentType $Type -Headers $ZertoSessionHeader
+                        $NICSettings = $OriginalNICSettings | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+                        $RecoverySiteId = $NIC.RecoverySiteId
+                        if ($vCloud)
+                        {
+                            $RecoveryOrgVDCId = $NIC.RecoveryOrgVdcId
+                            # If we havent gathered site details for this org VDC yet
+                            if (-not ($RecoveryOrgVdcList.Contains($RecoveryOrgVDCId)))
+                            {
+                                Write-Host "Discovering new OrgVDC " -NoNewline -ForegroundColor Cyan
+                                $null = $RecoveryOrgVdcList.Add($RecoveryOrgVDCId)
+                                $VPGOrgVdcNetworksURL = $baseURL+"virtualizationsites/$RecoverySiteId/orgvdcs/$RecoveryOrgVDCId/networks"
+                                Write-Host "networks." -ForegroundColor Cyan
+                                $NetworksBySiteId.$RecoveryOrgVdcId = Invoke-RestWrapper -Core $Turbocore -Method GET -Uri $VPGOrgVdcNetworksURL -ContentType $Type -Headers $ZertoSessionHeader
+                            }
+                            # Discover network identifiers
+                            $FailoverNetworkID = $NetworksBySiteId.$RecoveryOrgVdcId | Where-Object {$_.VirtualizationNetworkName -eq $NIC.FailoverNetworkName} | select -ExpandProperty NetworkIdentifier
+                            $FailoverTestNetworkID = $NetworksBySiteId.$RecoveryOrgVdcId | Where-Object {$_.VirtualizationNetworkName -eq $NIC.FailoverTestNetworkName} | select -ExpandProperty NetworkIdentifier
+                            if (($null -eq $FailoverNetworkID) -or ($null -eq $FailoverTestNetworkID))
+                            {
+                                Write-Host "VDC network not found!  Skipping NIC:$NICID VM:$VMID VPG:$VPGName)" -ForegroundColor Red
+                                Write-Host "Requested FailoverNetworkName: $($NIC.FailoverNetworkName)" -ForegroundColor Yellow
+                                Write-Host "Requested FailoverNetworkTestName: $($NIC.FailoverNetworkTestName)" -ForegroundColor Yellow
+                                Write-Host "Valid OrgVDC Networks:" -ForegroundColor Cyan
+                                $NetworksBySiteId.$RecoveryOrgVdcId | Select-Object -ExpandProperty VirtualizationNetworkName | Sort-Object
+                                continue
+                            }
+                            if ($NIC.FailoverIpMode -ne "StaticIp") {$NIC.FailoverStaticIp = $null}
+                            if ($NIC.FailoverTestIpMode -ne "StaticIp") {$NIC.FailoverTestStaticIp = $null}
+                            $NICSettings.Failover.VCD.IsResetMacAddress                     = [System.Convert]::ToBoolean($NIC.FailoverShouldResetMacAddress)
+                            $NICSettings.Failover.VCD.IpMode                                = $NIC.FailoverIpMode
+                            $NICSettings.Failover.VCD.RecoveryOrgVdcNetworkIdentifier       = $FailoverNetworkID
+                            $NICSettings.Failover.VCD.IpAddress                             = $NIC.FailoverStaticIp
+                            $NICSettings.Failover.VCD.IsConnected                           = [System.Convert]::ToBoolean($NIC.FailoverIsConnected)
+                            $NICSettings.Failover.VCD.IsPrimary                             = [System.Convert]::ToBoolean($NIC.FailoverIsPrimary)
+                            $NICSettings.FailoverTest.VCD.IsResetMacAddress                 = [System.Convert]::ToBoolean($NIC.FailoverTestShouldResetMacAddress)
+                            $NICSettings.FailoverTest.VCD.IpMode                            = $NIC.FailoverTestIpMode
+                            $NICSettings.FailoverTest.VCD.RecoveryOrgVdcNetworkIdentifier   = $FailoverTestNetworkID
+                            $NICSettings.FailoverTest.VCD.IpAddress                         = $NIC.FailoverTestStaticIp
+                            $NICSettings.FailoverTest.VCD.IsConnected                       = [System.Convert]::ToBoolean($NIC.FailoverTestIsConnected)
+                            $NICSettings.FailoverTest.VCD.IsPrimary                         = [System.Convert]::ToBoolean($NIC.FailoverTestIsPrimary)
+                        }
+                        else
+                        {
+                            if (-not ($RecoverySiteList.Contains($RecoverySiteId)))
+                            {
+                                Write-Host "Discovering new recovery site " -NoNewline -ForegroundColor Cyan
+                                $null = $RecoverySiteList.Add($RecoverySiteId)
+                                $VPGPortGroupsURL = $baseURL+"virtualizationsites/$RecoverySiteId/networks"
+                                Write-Host "networks." -ForegroundColor Cyan
+                                $NetworksBySiteId.$RecoverySiteId = Invoke-RestWrapper -Core $Turbocore -Method GET -Uri $VPGPortGroupsURL -ContentType $Type -Headers $ZertoSessionHeader
+                            }
+                            $FailoverNetworkID = $NetworksBySiteId.$RecoverySiteId | Where-Object {$_.VirtualizationNetworkName -eq $NIC.FailoverNetworkName} | select -ExpandProperty NetworkIdentifier
+                            $FailoverTestNetworkID = $NetworksBySiteId.$RecoverySiteId | Where-Object {$_.VirtualizationNetworkName -eq $NIC.FailoverTestNetworkName} | select -ExpandProperty NetworkIdentifier
+                            if (($null -eq $FailoverNetworkID) -or ($null -eq $FailoverTestNetworkID))
+                            {
+                                Write-Host "Vcenter network not found!  Skipping NIC:$NICID VM:$VMID VPG:$VPGName)" -ForegroundColor Red
+                                Write-Host "Requested FailoverNetworkName: $($NIC.FailoverNetworkName)" -ForegroundColor Yellow
+                                Write-Host "Requested FailoverNetworkTestName: $($NIC.FailoverNetworkTestName)" -ForegroundColor Yellow
+                                Write-Host "Valid vCenter Networks:" -ForegroundColor Cyan
+                                $NetworksBySiteId.$RecoverySiteId | Select-Object -ExpandProperty VirtualizationNetworkName | Sort-Object
+                                continue
+                            }
+                            $Failover = $NICSettings.Failover.Hypervisor
+                            $FailoverTest = $NICSettings.FailoverTest.Hypervisor
+                            if (([System.Convert]::ToBoolean($NIC.FailoverIsDHCP))) {$NIC.FailoverStaticIp = $null}
+                            if (([System.Convert]::ToBoolean($NIC.FailoverTestIsDHCP))) {$NIC.FailoverTestStaticIp = $null}
+                            $Failover.NetworkIdentifier             = $FailoverNetworkID
+                            $Failover.ShouldReplaceMacAddress       = [System.Convert]::ToBoolean($NIC.FailoverShouldReplaceMacAddress)
+                            $Failover.DnsSuffix                     = $NIC.FailoverDNSSuffix
+                            $Failover.Ipconfig.IsDhcp               = [System.Convert]::ToBoolean($NIC.FailoverIsDHCP)
+                            $Failover.Ipconfig.StaticIp             = $NIC.FailoverStaticIp
+                            $Failover.Ipconfig.SubnetMask           = $NIC.FailoverSubnetMask
+                            $Failover.Ipconfig.Gateway              = $NIC.FailoverGateway
+                            $Failover.Ipconfig.PrimaryDns           = $NIC.FailoverPrimaryDns
+                            $Failover.Ipconfig.SecondaryDns         = $NIC.FailoverSecondaryDns
+                            $FailoverTest.NetworkIdentifier         = $FailoverTestNetworkID
+                            $FailoverTest.ShouldReplaceMacAddress   = [System.Convert]::ToBoolean($NIC.FailoverTestShouldReplaceMacAddress)
+                            $FailoverTest.DnsSuffix                 = $NIC.FailoverTestDNSSuffix
+                            $FailoverTest.Ipconfig.IsDhcp           = [System.Convert]::ToBoolean($NIC.FailoverTestIsDHCP)
+                            $FailoverTest.Ipconfig.StaticIp         = $NIC.FailoverTestStaticIp
+                            $FailoverTest.Ipconfig.SubnetMask       = $NIC.FailoverTestSubnetMask
+                            $FailoverTest.Ipconfig.Gateway          = $NIC.FailoverTestGateway
+                            $FailoverTest.Ipconfig.PrimaryDns       = $NIC.FailoverTestPrimaryDns
+                            $FailoverTest.Ipconfig.SecondaryDns     = $NIC.FailoverTestSecondaryDns
+                        }
+                        $VMNICJSON = $NICSettings | ConvertTo-Json -Depth 5
+                        # Compare objects by breaking them back into JSON, split by lines, and trim whitespace for output formatting
+                        $Comparison = Compare-Object (($OriginalNICSettings | ConvertTo-Json -Depth 10) -split '\r?\n' -replace '^\s+|\s+$') `
+                        (($NICSettings | ConvertTo-Json -Depth 10) -split '\r?\n' -replace '^\s+|\s+$')
+                        if ($null -ne $Comparison)
+                        {
+                            # If *any* nics in the VPG are requested to be changed, then we must commit
+                            $SkipVPGCommit = $false
+                            Write-Host ($Comparison | Select-Object @{E={$_.InputObject};N='RequestedChanges'} | Format-Table | Out-String)
+                            $EditVMNICURL = $BaseURL + "vpgSettings/$VPGSettingsID/vms/$VMID/nics/$NICID"
+                            # VMNICID might contain spaces so encode the URL
+                            $EncodedVMNICURL = [System.Web.HttpUtility]::UrlPathEncode($EditVMNICURL)
+                            $null = Invoke-RestWrapper -Core $Turbocore -Method PUT -Uri $EncodedVMNICURL -Body $VMNICJSON -ContentType $Type -Headers $ZertoSessionHeader  
+                        }
+                        $FailoverNetworkID = $null
+                        $FailoverTestNetworkID = $null
+                    }
+                }
+            }
+            if (-not ($SkipVPGCommit))
+            {
+                $CommitVPGSettingURL = $BaseURL + "vpgSettings/$VPGSettingsID/commit"
+                $null = Invoke-RestWrapper -Core $Turbocore -Method POST -Uri $CommitVPGSettingURL -Headers $ZertoSessionHeader -ContentType $Type
+                if ($?) {Write-Host "Update for VPG:$VPGName completed" -ForegroundColor Green} else {Write-Host "Update failed" -ForegroundColor Red;continue}            
+            }
+            else
+            {
+                Write-Host "No changes for VPG:$VPGName" -ForegroundColor Green 
+                # Deleting VPG edit settings ID (same as closing the edit screen on a VPG in the ZVM without making any changes)
+                $VPGSettingsURL = $BaseURL + "vpgSettings/$VPGSettingsID"
+                $null = Invoke-RestWrapper -Core $Turbocore -Method Delete -Uri $VPGSettingsURL -ContentType $Type -Headers $ZertoSessionHeader
+            }
+        }
+        Write-Host "All done!" 
+    }
+}
+
+Set-Alias -Name iznic -Value Import-ZertoVPGNetworkSettings
+
+
+<#
  .Synopsis
   Displays a list of datastore usage on a particular site or for a specific customer on that site.
 
@@ -606,4 +929,4 @@ Set-Alias -Name vpgids -Value Remove-vpgSettingsIDs
 
 #End function Remove-vpgSettingsIDs
 
-Export-ModuleMember -Function Get-CustomerDRStorageReport, Export-ZertoVPGNetworkSettings, Get-ZertoDatastoreUsage, Remove-vpgSettingsIDs -Alias znic, gdu, vpgids, drs
+Export-ModuleMember -Function Get-CustomerDRStorageReport, Export-ZertoVPGNetworkSettings, Import-ZertoVPGNetworkSettings, Get-ZertoDatastoreUsage, Remove-vpgSettingsIDs -Alias znic, gdu, vpgids, drs, iznic
