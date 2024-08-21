@@ -115,7 +115,9 @@ function Export-ZertoVPGNetworkSettings9 {
             })]
         [string]$ExportPath="~/ZertoScripts",
         [Parameter()]
-        [string]$Port="9669"
+        [string]$Port="9669",
+        [Parameter()]
+        [switch]$ProtectedVMList
     )
 
     # Parameter work
@@ -400,20 +402,29 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                         Select-Object -ExpandProperty VirtualizationNetworkName 
                         $FailoverTestNetworkName = $OrgVdcNetworkList | Where-Object {$_.NetworkIdentifier -eq $FailoverTest.RecoveryOrgVdcNetworkIdentifier} | 
                         Select-Object -ExpandProperty VirtualizationNetworkName 
-                        $CSVLine  = [ordered]@{
-                            VPGName                       = $VPGName
+                        if ($ProtectedVMList) {
+                            $CSVLine  = [ordered]@{
+                            BootGroup                     = $null
                             VMName                        = $VMName
-                            NICID                         = $VMNICID
-                            vCDGuestCustomization         = $VCDGuestCustomization
+                            VPGName                       = $VPGName
+                            ProductionIPs                 = $null
+                            PublicDRNATs                  = $VMNICID
                             FailoverNetworkName           = $FailoverNetworkName
-                            FailoverIpMode                = $Failover.IpMode
                             FailoverStaticIp              = $Failover.IpAddress
+                            FailoverTestNetworkName       = $FailoverTestNetworkName
+                            FailoverTestStaticIp          = $FailoverTest.IpAddress
+                            RPO                           = $null
+                            JournalHardLimit              = $null
+                            AlwaysonAvailibilityGroup     = $null
+                            SpecialStorageProvisioning    = $null
+                            CaseNumberOrPINumber          = $null
+                            DateAddedRemoved              = $null
+                            NotesDontCopyThisColumn       = $null
+                            FailoverIpMode                = $Failover.IpMode                        
                             FailoverIsResetMacAddress     = $Failover.IsResetMacAddress
                             FailoverIsPrimary             = $Failover.IsPrimary
-                            FailoverIsConnected           = $Failover.IsConnected
-                            FailoverTestNetworkName       = $FailoverTestNetworkName
-                            FailoverTestIpMode            = $FailoverTest.IpMode
-                            FailoverTestStaticIp          = $FailoverTest.IpAddress
+                            FailoverIsConnected           = $Failover.IsConnected                        
+                            FailoverTestIpMode            = $FailoverTest.IpMode                        
                             FailoverTestIsResetMacAddress = $FailoverTest.IsResetMacAddress
                             FailoverTestIsPrimary         = $FailoverTest.IsPrimary
                             FailoverTestIsConnected       = $FailoverTest.IsConnected
@@ -422,7 +433,32 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                             IsVcloud                      = $true
                             RecoverySiteID                = $VPGRecoverySiteID
                             RecoveryOrgVdcID              = $VPGRecoveryOrgVDC
-                        }
+                            }
+                        } else {
+                            $CSVLine  = [ordered]@{
+                                VPGName                       = $VPGName
+                                VMName                        = $VMName
+                                NICID                         = $VMNICID
+                                vCDGuestCustomization         = $VCDGuestCustomization
+                                FailoverNetworkName           = $FailoverNetworkName
+                                FailoverIpMode                = $Failover.IpMode
+                                FailoverStaticIp              = $Failover.IpAddress
+                                FailoverIsResetMacAddress     = $Failover.IsResetMacAddress
+                                FailoverIsPrimary             = $Failover.IsPrimary
+                                FailoverIsConnected           = $Failover.IsConnected
+                                FailoverTestNetworkName       = $FailoverTestNetworkName
+                                FailoverTestIpMode            = $FailoverTest.IpMode
+                                FailoverTestStaticIp          = $FailoverTest.IpAddress
+                                FailoverTestIsResetMacAddress = $FailoverTest.IsResetMacAddress
+                                FailoverTestIsPrimary         = $FailoverTest.IsPrimary
+                                FailoverTestIsConnected       = $FailoverTest.IsConnected
+                                VPGID                         = $VPGID
+                                VMID                          = $VMID
+                                IsVcloud                      = $true
+                                RecoverySiteID                = $VPGRecoverySiteID
+                                RecoveryOrgVdcID              = $VPGRecoveryOrgVDC
+                                }
+                            }
                         $null = $VMNICArrayList.Add((New-Object PSObject -Property $CSVLine))
                     }
                     else
@@ -588,7 +624,9 @@ function Export-ZertoVPGNetworkSettings {
             })]
         [string]$ExportPath="~/ZertoScripts",
         [Parameter()]
-        [string]$Port="443"
+        [string]$Port="443",
+        [Parameter()]
+        [switch]$ProtectedVMList
     )
 
     # Parameter work
@@ -769,20 +807,29 @@ function Export-ZertoVPGNetworkSettings {
                         Select-Object -ExpandProperty VirtualizationNetworkName 
                         $FailoverTestNetworkName = $OrgVdcNetworkList | Where-Object {$_.NetworkIdentifier -eq $FailoverTest.RecoveryOrgVdcNetworkIdentifier} | 
                         Select-Object -ExpandProperty VirtualizationNetworkName 
-                        $CSVLine  = [ordered]@{
-                            VPGName                       = $VPGName
+                        if ($ProtectedVMList) {
+                            $CSVLine  = [ordered]@{
+                            BootGroup                     = $null
                             VMName                        = $VMName
-                            NICID                         = $VMNICID
-                            vCDGuestCustomization         = $VCDGuestCustomization
+                            VPGName                       = $VPGName
+                            ProductionIPs                 = $null
+                            PublicDRNATs                  = $VMNICID
                             FailoverNetworkName           = $FailoverNetworkName
-                            FailoverIpMode                = $Failover.IpMode
                             FailoverStaticIp              = $Failover.IpAddress
+                            FailoverTestNetworkName       = $FailoverTestNetworkName
+                            FailoverTestStaticIp          = $FailoverTest.IpAddress
+                            RPO                           = $null
+                            JournalHardLimit              = $null
+                            AlwaysonAvailibilityGroup     = $null
+                            SpecialStorageProvisioning    = $null
+                            CaseNumberOrPINumber          = $null
+                            DateAddedRemoved              = $null
+                            NotesDontCopyThisColumn       = $null
+                            FailoverIpMode                = $Failover.IpMode                        
                             FailoverIsResetMacAddress     = $Failover.IsResetMacAddress
                             FailoverIsPrimary             = $Failover.IsPrimary
-                            FailoverIsConnected           = $Failover.IsConnected
-                            FailoverTestNetworkName       = $FailoverTestNetworkName
-                            FailoverTestIpMode            = $FailoverTest.IpMode
-                            FailoverTestStaticIp          = $FailoverTest.IpAddress
+                            FailoverIsConnected           = $Failover.IsConnected                        
+                            FailoverTestIpMode            = $FailoverTest.IpMode                        
                             FailoverTestIsResetMacAddress = $FailoverTest.IsResetMacAddress
                             FailoverTestIsPrimary         = $FailoverTest.IsPrimary
                             FailoverTestIsConnected       = $FailoverTest.IsConnected
@@ -791,7 +838,32 @@ function Export-ZertoVPGNetworkSettings {
                             IsVcloud                      = $true
                             RecoverySiteID                = $VPGRecoverySiteID
                             RecoveryOrgVdcID              = $VPGRecoveryOrgVDC
-                        }
+                            }
+                        } else {
+                            $CSVLine  = [ordered]@{
+                                VPGName                       = $VPGName
+                                VMName                        = $VMName
+                                NICID                         = $VMNICID
+                                vCDGuestCustomization         = $VCDGuestCustomization
+                                FailoverNetworkName           = $FailoverNetworkName
+                                FailoverIpMode                = $Failover.IpMode
+                                FailoverStaticIp              = $Failover.IpAddress
+                                FailoverIsResetMacAddress     = $Failover.IsResetMacAddress
+                                FailoverIsPrimary             = $Failover.IsPrimary
+                                FailoverIsConnected           = $Failover.IsConnected
+                                FailoverTestNetworkName       = $FailoverTestNetworkName
+                                FailoverTestIpMode            = $FailoverTest.IpMode
+                                FailoverTestStaticIp          = $FailoverTest.IpAddress
+                                FailoverTestIsResetMacAddress = $FailoverTest.IsResetMacAddress
+                                FailoverTestIsPrimary         = $FailoverTest.IsPrimary
+                                FailoverTestIsConnected       = $FailoverTest.IsConnected
+                                VPGID                         = $VPGID
+                                VMID                          = $VMID
+                                IsVcloud                      = $true
+                                RecoverySiteID                = $VPGRecoverySiteID
+                                RecoveryOrgVdcID              = $VPGRecoveryOrgVDC
+                                }
+                            }
                         $null = $VMNICArrayList.Add((New-Object PSObject -Property $CSVLine))
                     }
                     else
