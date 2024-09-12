@@ -495,7 +495,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         }
     }
     # Exporting to CSV
-    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-VPGS.csv"
+    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-VPGS$(if ($Zorg){$Zorg}).csv"
     try
     {
         $VPGArray | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
@@ -514,7 +514,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         #If we wait a minute, a new name will be generated.
         Write-Host "$CSVExportFile is already open.  Adding seconds to name" -ForegroundColor Yellow
         Start-Sleep -Seconds 60
-        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-VPGS.csv"
+        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-VPGS$(if ($Zorg){$Zorg}).csv"
         $VPGArray | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
     }
     catch
@@ -976,7 +976,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         }
     }
     # Exporting to CSV
-    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-VPGS.csv"
+    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-VPGS$(if ($Zorg){$Zorg}).csv"
     try
     {
         $VPGArray | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
@@ -995,7 +995,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         #If we wait a minute, a new name will be generated.
         Write-Host "$CSVExportFile is already open.  Adding seconds to name" -ForegroundColor Yellow
         Start-Sleep -Seconds 60
-        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-VPGS.csv"
+        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-VPGS$(if ($Zorg){$Zorg}).csv"
         $VPGArray | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
     }
     catch
@@ -1804,7 +1804,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
     }
     Write-Host "All done!" -ForegroundColor Green
     # Exporting to CSV
-    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-NICs.csv"
+    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-NICs$(if ($Zorg){$Zorg}).csv"
     try
     {
         $VMNICArrayList | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
@@ -1823,7 +1823,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         #If we wait a minute, a new name will be generated.
         Write-Host "$CSVExportFile is already open.  Adding seconds to name" -ForegroundColor Yellow
         Start-Sleep -Seconds 60
-        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-NICs.csv"
+        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-NICs$(if ($Zorg){$Zorg}).csv"
         $VMNICArrayList | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
     }
     catch
@@ -2210,7 +2210,7 @@ function Export-ZertoVPGNetworkSettings {
     Write-Host "All done!" -ForegroundColor Green
     # Exporting to CSV
     $ZVM = ($ZVM.Trim("[]")) -replace ":", "."
-    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-NICs.csv"
+    $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmm) + "-$ZVM-NICs$(if ($Zorg){$Zorg}).csv"
     try
     {
         $VMNICArrayList | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
@@ -2228,7 +2228,7 @@ function Export-ZertoVPGNetworkSettings {
         #If we wait a minute, a new name will be generated.
         Write-Host "$CSVExportFile is already open.  Adding seconds to name" -ForegroundColor Yellow
         Start-Sleep -Seconds 60
-        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-NICs.csv"
+        $CSVExportFile = $ExportPath + "/" + (Get-Date -Format MM-dd-hhmmss) + "-$ZVM-NICs$(if ($Zorg){$Zorg}).csv"
         $VMNICArrayList | Sort-Object VPGName | Export-Csv $CSVExportFile -NoTypeInformation -Force
     }
     catch
