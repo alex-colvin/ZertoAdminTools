@@ -3,7 +3,7 @@
 Import-Module -Name ZertoApiWrapper -RequiredVersion 2.0.0
 Import-Module -Name CredentialManager
 
-function Add-RecoveryCentralCustomer
+<#function Add-RecoveryCentralCustomer
 {
     param(
             [Parameter(Mandatory)]
@@ -46,6 +46,7 @@ function Get-CustomerDRStorageReport
 }
 
 Set-Alias -Name drs -Value Get-CustomerDRStorageReport
+#>
 
 <#
 .SYNOPSIS
@@ -97,7 +98,7 @@ Set-Alias -Name drs -Value Get-CustomerDRStorageReport
     Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -RecoveryVPGType "vCenter" -VPGName "VPG1"
 
 #>
-function Export-ZertoVPGSettings9 {
+<#function Export-ZertoVPGSettings9 {
 
     [CmdletBinding()]
     param(
@@ -526,6 +527,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 }
 
 Set-Alias -Name zset9 -Value Export-ZertoVPGSettings9
+#>
 
 <#
 .SYNOPSIS
@@ -578,7 +580,7 @@ Set-Alias -Name zset9 -Value Export-ZertoVPGSettings9
 
 #>
 
-function Export-ZertoVPGSettings {
+<#function Export-ZertoVPGSettings9 {
 
     [CmdletBinding()]
     param(
@@ -1006,11 +1008,11 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
     }
 }
 
-Set-Alias -Name zset -Value Export-ZertoVPGSettings
-
+Set-Alias -Name zset9 -Value Export-ZertoVPGSettings9
+#>
 <#
 .SYNOPSIS
-  This Commandlet is the compliment of Export-ZertoVPGSettings. After exporting settings to a csv and editing to the desired settings, this function imports the csv and uploads the network settings for VPGs to a Zerto Virtual Manager (ZVM).
+  This Commandlet is the compliment of Export-ZertoVPGSettings9. After exporting settings to a csv and editing to the desired settings, this function imports the csv and uploads the network settings for VPGs to a Zerto Virtual Manager (ZVM).
 
 .DESCRIPTION
   This function connects to a Zerto Virtual Manager (ZVM) and sends settings for Virtual Protection Groups (VPGs) based on and a csv file. 
@@ -1032,7 +1034,7 @@ Set-Alias -Name zset -Value Export-ZertoVPGSettings
    Import-ZertoSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -CSVPath "C:\users\username\documents\VPGsettings.csv"
 
 #>
-function Import-ZertoVPGSettings {
+<#function Import-ZertoVPGSettings9 {
 
     [CmdletBinding()]
     param(
@@ -1322,8 +1324,8 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
     }
 }
 
-Set-Alias -Name izset -Value Import-ZertoVPGSettings
-
+Set-Alias -Name izset9 -Value Import-ZertoVPGSettings9
+#>
 <#
 .SYNOPSIS
     Retrieves and exports network settings for VPGs from a Zerto Virtual Manager (ZVM) v9.7 and below.
@@ -1374,7 +1376,7 @@ Set-Alias -Name izset -Value Import-ZertoVPGSettings
     Export-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -RecoveryVPGType "vCenter" -VPGName "VPG1"
 
 #>
-function Export-ZertoVPGNetworkSettings9 { 
+<#function Export-ZertoVPGNetworkSettings9 { 
 
     [CmdletBinding()]
     param(
@@ -1632,14 +1634,14 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         $EditVPGURL = $BaseURL+"vpgSettings"
         $VPGSettingsID = Invoke-RestWrapper -Core $TurboCore -Uri $EditVPGURL -Method Post -Body $VPGJSON -ContentType $Type -Headers $ZertoSessionHeader   
         if ($VPGSettingsID -ne $null) {$ValidVPGSettingsID = $true} 
-        <#else {
-            $ValidVPGSettingsID = $false
+        #else {
+            #$ValidVPGSettingsID = $false
             #Zerto holds a max of 100 vpgSettings objects. Checking for that here and prompting user to delete vpgSettings objects.
-            $VPGSettingsObjects = Invoke-RestWrapper -Core $TurboCore -Uri $EditVPGURL -Method Get -ContentType $Type -Headers $ZertoSessionHeader
-            $VPGSettingsObjectCount = $VPGSettingsObjects.count
-            Write-Host "Zerto holds a maximum of 101 vpg settings objects. 
+            #$VPGSettingsObjects = Invoke-RestWrapper -Core $TurboCore -Uri $EditVPGURL -Method Get -ContentType $Type -Headers $ZertoSessionHeader
+            #$VPGSettingsObjectCount = $VPGSettingsObjects.count
+            #Write-Host "Zerto holds a maximum of 101 vpg settings objects. 
          
-            }#>
+            #}
 
 
         # Getting VPG settings from API
@@ -1833,6 +1835,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
     }
 }
 Set-Alias -Name znic9 -Value Export-ZertoVPGNetworkSettings9
+#>
 <#
 .SYNOPSIS
   Retrieves and exports network settings for VPGs from a Zerto Virtual Manager (ZVM) v10.0 and up.
@@ -1884,7 +1887,7 @@ Set-Alias -Name znic9 -Value Export-ZertoVPGNetworkSettings9
 
 #>
 
-function Export-ZertoVPGNetworkSettings {
+<#function Export-ZertoVPGNetworkSettings {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory,HelpMessage='Enter ZVM hostname without the port here eg. "zerto-lab.lab.zerto.com"')]
@@ -2239,6 +2242,7 @@ function Export-ZertoVPGNetworkSettings {
 }
 
 Set-Alias -Name znic -Value Export-ZertoVPGNetworkSettings
+#>
 
 <#
 .SYNOPSIS
@@ -2264,7 +2268,7 @@ Set-Alias -Name znic -Value Export-ZertoVPGNetworkSettings
    Import-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -CSVPath "C:\users\username\documents\VPGsettings.csv"
 
 #>
-function Import-ZertoVPGNetworkSettings {
+<#function Import-ZertoVPGNetworkSettings {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -2462,10 +2466,8 @@ function Import-ZertoVPGNetworkSettings {
         Write-Host "All done!" 
     }
 }
-
-
 Set-Alias -Name iznic -Value Import-ZertoVPGNetworkSettings
-
+#>
 <#
 .SYNOPSIS
   This Commandlet is the compliment of Export-ZertoVPGNetworkSettings. After exporting network settings to a csv and editting to the desired settings, this function imports the csv and uploads the network settings for VPGs to a Zerto Virtual Manager (ZVM).
@@ -2490,7 +2492,7 @@ Set-Alias -Name iznic -Value Import-ZertoVPGNetworkSettings
    Import-ZertoNetworkSettings -ZVM "zerto-lab.lab.zerto.com" -Credentials $MyCreds -CSVPath "C:\users\username\documents\VPGsettings.csv"
 
 #>
-function Import-ZertoVPGNetworkSettings9 {
+<#function Import-ZertoVPGNetworkSettings9 {
 
     [CmdletBinding()]
     param(
@@ -2774,9 +2776,8 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         Write-Host "All done!" 
     }
 }
-
 Set-Alias -Name iznic9 -Value Import-ZertoVPGNetworkSettings9
-
+#>
 <#
  .Synopsis
   Displays a list of datastore usage on a particular site or for a specific customer on that site.
@@ -2855,15 +2856,11 @@ function Get-ZertoDatastoreUsage {
 
 Set-Alias -Name gdu -Value Get-ZertoDatastoreUsage
 
-function Remove-vpgSettingsIDs
-{
+<#function Remove-vpgSettingsIDs {
     $vpgSettingsIds = Get-ZertoVpgSetting
     foreach ($vpgSettingsID in $vpgSettingsIds){Remove-ZertoVpgSettingsIdentifier -vpgSettingsIdentifier $vpgSettingsID.VpgSettingsIdentifier}
 }
-
 Set-Alias -Name vpgids -Value Remove-vpgSettingsIDs
-
-
-#End function Remove-vpgSettingsIDs
+#>
 
 Export-ModuleMember -Function Get-CustomerDRStorageReport, Export-ZertoVPGNetworkSettings, Import-ZertoVPGNetworkSettings, Export-ZertoVPGNetworkSettings9, Import-ZertoVPGNetworkSettings9, Get-ZertoDatastoreUsage, Remove-vpgSettingsIDs, Export-ZertoVPGSettings, Export-ZertoVPGSettings9, Import-ZertoVPGSettings -Alias znic, gdu, vpgids, drs, iznic, znic9, iznic9, zset, zset9, izset
